@@ -2,18 +2,112 @@
 import 'tldraw/tldraw.css'
 import { useEditor, Tldraw, AssetRecordType  } from 'tldraw'
 // import { useRef } from 'react'
-import { useState, useRef,  } from 'react';
+import { useRef,  useState} from 'react';
 
+
+// export function GoBackButton() {
+  
+
+//   const handleGoBack = () => {
+//     window.parent.postMessage(
+//       { 
+//         type: 'IMAGE_DATA',
+//         image: imageData 
+//       },
+//       'http://localhost:5173/'
+//     );
+//     console.log('Image sent to parent window');
+//     // window.history.back()
+//   }
+
+//   return (
+//     <>
+//       <button
+//         style={{
+//           position: 'absolute',
+//           top: '2px',
+//           left: '685px',
+//           zIndex: 1000,
+//           padding: '8px 16px',
+//           backgroundColor: 'white',
+//           border: '1px solid #ddd',
+//           borderRadius: '4px',
+//           cursor: 'pointer',
+//           display: 'flex',
+//           alignItems: 'center',
+//           gap: '8px'
+//         }}
+//         onClick={handleGoBack}
+//       >
+//         <img src="yellow.png" alt="upload" style={{ width: '30px', height: '30px', marginRight: '4px' }} />
+//         Done Designing
+//       </button>
+//     </>
+//   )
+// }
 
 export function GoBackButton() {
+  const editor = useEditor();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
+  const handleGoBack = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
 
-  const handleGoBack = () => {
-    window.history.back()
-  }
+      if (!editor) {
+        throw new Error('Editor not initialized');
+      }
+
+      // 1. Get all shapes from the current page
+      const shapeIds = editor.getCurrentPageShapeIds();
+      if (shapeIds.size === 0) {
+        throw new Error('Please create some artwork before saving');
+      }
+
+      // 2. Export the drawing as PNG
+      const { blob } = await editor.toImage([...shapeIds], {
+        format: 'png',
+        background: false,
+        scale: 2
+      });
+
+      // 3. Convert blob to base64 for transmission
+      const reader = new FileReader();
+      reader.onload = () => {
+        const imageData = reader.result;
+        
+        // 4. Send to parent Vue app
+        window.parent.postMessage(
+          { 
+            type: 'IMAGE_DATA',
+            image: imageData,
+            filename: `design-${new Date().toISOString().slice(0, 10)}.png`,
+            timestamp: new Date().toISOString()
+          },
+          'http://localhost:5173' // Must match parent's origin
+        );
+        
+        console.log('Design successfully sent to parent window');
+      };
+      
+      reader.onerror = () => {
+        throw new Error('Failed to convert image');
+      };
+      
+      reader.readAsDataURL(blob);
+
+    } catch (err) {
+      console.error('Export error:', err);
+      
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <>
+    <div style={{ position: 'relative' }}>
       <button
         style={{
           position: 'absolute',
@@ -21,21 +115,56 @@ export function GoBackButton() {
           left: '685px',
           zIndex: 1000,
           padding: '8px 16px',
-          backgroundColor: 'white',
+          backgroundColor: isLoading ? '#f0f0f0' : 'white',
           border: '1px solid #ddd',
           borderRadius: '4px',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
-          gap: '8px'
+          gap: '8px',
+          opacity: isLoading ? 0.7 : 1,
+          transition: 'all 0.2s ease'
         }}
         onClick={handleGoBack}
+        disabled={isLoading}
       >
-        <img src="yellow.png" alt="upload" style={{ width: '30px', height: '30px', marginRight: '4px' }} />
-        Done Designing
+        {isLoading ? (
+          <span>Exporting...</span>
+        ) : (
+          <>
+            <img 
+              src="yellow.png" 
+              alt="Done" 
+              style={{ 
+                width: '30px', 
+                height: '30px', 
+                marginRight: '4px',
+                filter: isLoading ? 'grayscale(80%)' : 'none'
+              }} 
+            />
+            Done Designing
+          </>
+        )}
       </button>
-    </>
-  )
+
+      {error && (
+        <div style={{
+          position: 'absolute',
+          top: '50px',
+          left: '685px',
+          zIndex: 1000,
+          padding: '8px',
+          backgroundColor: '#ffebee',
+          border: '1px solid #ffcdd2',
+          borderRadius: '4px',
+          color: '#d32f2f',
+          maxWidth: '300px'
+        }}>
+          {error}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function UploadImageButton() {
@@ -163,7 +292,7 @@ function ExportCanvasButton() {
       
     } catch (error) {
       console.error('Export error:', error);
-      throw error; // This will be caught by ErrorBoundary
+      throw error; 
     }
   };
 
